@@ -86,9 +86,9 @@ def run_algorithm(circuit_data, fault_list, mode):
     mem_before = memory_usage()
     # TO DO: DEVELOP 1) BASIC PODEM for comparison 2) OBSERVABILITY & CONTROLLABILITY-AWARE PODEM
     if mode=="baseline":
-        F_D, D_B,C, max_time_untestable=basic_podem(basic_circuit, fault_list)
+        F_D, D_B,C, max_time_untestable, test_patterns=basic_podem(basic_circuit, fault_list)
     else:
-        F_D, D_B,C, max_time_untestable=proposed_podem(basic_circuit, fault_list)
+        F_D, D_B,C, max_time_untestable, test_patterns=proposed_podem(basic_circuit, fault_list)
 
     time_elapsed=time.time()-start_time
     mem_usage = memory_usage()-mem_before
@@ -104,7 +104,7 @@ def run_algorithm(circuit_data, fault_list, mode):
     print("Memory consumed by the algorithm:",mem_usage)
     print("Untestable Fault Detection Efficiency:", max_time_untestable)
     print("Conflict Resolution Efficiency:", conflict_eff)
-    return coverage, time_elapsed, mem_usage, max_time_untestable, conflict_eff
+    return test_patterns, coverage, time_elapsed, mem_usage, max_time_untestable, conflict_eff
 
 
 parent_folder="./Benchmark/I99T/i99t/"
@@ -121,8 +121,8 @@ table.field_names = ["Circuit", "Coverage (Baseline)", "Coverage (Proposed)", "T
 for bench_idx, bench in enumerate(bench_set):
     data_circuit=netlist_read(bench, parent_folder)
 
-    coverage_b, time_elapsed_b, mem_usage_b, max_time_untestable_b, conflict_eff_b=run_algorithm(data_circuit, fault_list[bench_idx], "baseline")
-    coverage, time_elapsed, mem_usage, max_time_untestable, conflict_eff=run_algorithm(data_circuit, fault_list[bench_idx], "proposed")
+    test_patterns_b, coverage_b, time_elapsed_b, mem_usage_b, max_time_untestable_b, conflict_eff_b=run_algorithm(data_circuit, fault_list[bench_idx], "baseline")
+    test_patterns, coverage, time_elapsed, mem_usage, max_time_untestable, conflict_eff=run_algorithm(data_circuit, fault_list[bench_idx], "proposed")
 
     table.add_row([bench, coverage_b,coverage, time_elapsed_b,  time_elapsed, mem_usage_b, mem_usage,
                        max_time_untestable_b, max_time_untestable, conflict_eff_b, conflict_eff])
