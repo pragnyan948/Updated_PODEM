@@ -35,5 +35,5 @@ class Gate:
         return "GateInst={}, GateType={}, Inputs={}".format(self.name, self.typ, self.inputs)
 
 #netlist = read_netlist("/ece/home/kola0161/vda2/simple_circuit.bench")
-netlist = read_netlist("/ece/home/kola0161/vda2/I99T-master/i99t/b03/b03_opt_C.bench")
-pp.pprint(netlist)
+#netlist = read_netlist("/ece/home/nalla052/EE5302/Project/Benchmark/I99T/i99t/b03/b03_opt_C.bench")
+#pp.pprint(netlist)
