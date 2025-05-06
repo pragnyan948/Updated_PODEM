@@ -15,7 +15,7 @@ def read_csv_file(file_path):
     with open(file_path, 'r') as f:
         reader = csv.DictReader(f, skipinitialspace=True)  
         for row in reader:
-            for key in ['#List of Collapsed Faults', '#Controllabilty-0', '#Controllabilty-1', '#Observability-0', '#Observability-1']:
+            for key in ['#List of Collapsed Faults', '#Controllabilty-0', '#Controllabilty-1', '#Observability']:
                 row[key] = ast.literal_eval(row[key])
             row['#Inputs'] = int(row['#Inputs'])
             row['#Collapsed Faults'] = int(row['#Collapsed Faults'])
@@ -83,14 +83,13 @@ def filter_benchmark(parent_folder):
         max_signal = max(usage_data, key=usage_data.get)
         max_count = usage_data[max_signal]
         #print("Max Fanout of the Benchmark b"+str_count+":", max_count)
-        if max_count>40:
+        if max_count>1:
             bench_set.add(count_bench)
         #pdb.set_trace()
         
     print("Filtered Benchamrks: ", bench_set)
     return bench_set
 
-#TO DO:Obtain List Faults
 def obtain_list_faults(file_path, circuit_data):
     #Get gate faults from the csv file
     data=read_csv_file("Fault_Collapsing.csv")
@@ -143,21 +142,158 @@ def obtain_list_faults(file_path, circuit_data):
     
     return collapsed_faults
 
-#TO DO: Observability and Controllability Map
+
 #CO_0: Observability of the nodes to propagate 0 to primary outputs
 #CO_1: Observability of the nodes to propagate 1 to primary outputs
 #CC_0: Controllability of the nodes to be set at 0 from primary inputs
 #CC_1: Controllability of the nodes to be set at 1 from primary inputs
 def COP_map(circuit_data):
+    data=read_csv_file("Fault_Collapsing.csv")
+    #pdb.set_trace()
+    CO, CC_0, CC_1={}, {}, {}
+    CC_0_map, CC_1_map, CO_map={}, {}, {}
+    input_mapping, output_mapping={}, {}
     #forward traversal
-    #Read gates
-        #Get controllability of the gate from csv file
-        #Add it to the dynamic programming table
-    #backward traversal
-    #Read gates
-        #Get observability of the gate from csv file
-        #Add it to the dynamic programming table
-    return CO_0, CO_1, CC_0, CC_1
+    
+    def controllability_eval(CC_map, CC0_in, CC1_in):
+        inputs = []
+        output = None
+        offset = 0
+        use_min = False
+        CC_in={}
+        for item in CC_map:
+            signal, value = item.split(':')
+            if signal.startswith('O'):
+                output = signal
+                if 'min' in value.lower():
+                    use_min = True
+                    offset = int(value.lower().replace('min', '').replace('+', '').strip())
+                else:
+                    offset = int(value.replace('+', '').strip())
+            else:
+                inputs.append(signal)
+                CC_in[signal] = CC0_in[signal] if value == '0' else CC1_in[signal]
+
+        if use_min:
+            CC = min(CC_in[inp] for inp in inputs) + offset
+        else:
+            CC = sum(CC_in[inp] for inp in inputs) + offset
+        return CC    
+        
+    def compute_node_controllability(node):
+        #pdb.set_trace()
+        if node in CC_0 and node in CC_1:
+            return  
+
+        value = circuit_data[node]
+        type = value.typ
+        inputs = value.inputs
+        output = value.name if type != 'INPUT' and type!='OUTPUT' else value.name.split('_')[1]
+        #pdb.set_trace()
+
+        if type == 'INPUT':
+            CC_0[output] = 1
+            CC_1[output] = 1
+            return
+        if type == 'OUTPUT':
+            CO[output] = 0
+            return
+
+        for inp in inputs:
+            if inp not in CC_0:
+                compute_node_controllability(inp)
+
+        CC_0_map[output] = data.get(str(type) + '-' + str(len(inputs)))["#Controllabilty-0"]
+        CC_1_map[output] = data.get(str(type) + '-' + str(len(inputs)))["#Controllabilty-1"]
+        
+        input_mapping[output] = {f'I{i+1}': inputs[i] for i in range(len(inputs))}
+        CC0_in, CC0_in= {}, {}
+        CC0_in = {f'I{i+1}': CC_0[inp] for i, inp in enumerate(inputs)}
+        CC1_in = {f'I{i+1}': CC_1[inp] for i, inp in enumerate(inputs)}
+
+        # CC0 and CC1
+        CC_0[output] = controllability_eval(CC_0_map[output], CC0_in, CC1_in)
+        CC_1[output] = controllability_eval(CC_1_map[output], CC0_in, CC1_in)
+
+    def observability_eval(CO_map, CO, CC0_in, CC1_in, index):
+        inputs = []
+        output = None
+        offset = 0
+        use_min = False
+        CC_in={}
+        for item in CO_map:
+            signal, value = item.split(':')
+            if signal.startswith('O'):
+                output = signal
+                if 'min' in value.lower():
+                    use_min = True
+                    offset = int(value.lower().replace('min', '').replace('+', '').strip())
+                else:
+                    offset = int(value.replace('+', '').strip())
+            else:
+                if value == '1':
+                    #pdb.set_trace()
+                    bool_CC1 = signal.split('-')[0][-1]
+                    inp=signal.split('-')[1]
+                    if int(inp[-1])==index+1:
+                        inp='I1'
+                    inputs.append(inp)
+                    CC_in[inp] = CC1_in[inp] if bool_CC1 else CC0_in[inp]
+
+        if use_min:
+            CC = min(CC_in[inp] for inp in inputs) + offset+CO
+        else:
+            CC = sum(CC_in[inp] for inp in inputs) + offset+CO
+        return CC    
+
+
+    def compute_node_observability(node):
+        value = circuit_data[node]
+        type = value.typ
+        inputs = value.inputs
+        output = value.name if type != 'INPUT' and type!='OUTPUT' else value.name.split('_')[1]
+        if type == 'INPUT' or type=='OUTPUT':
+            return
+        # Recursively compute observability of output node first
+        if output not in CO:
+            for out_node in circuit_data.keys():
+                if output in circuit_data[out_node].inputs:
+                    compute_node_observability(out_node)
+
+        # Now compute CO for the inputs
+        CO_map[output] = data.get(str(type) + '-' + str(len(inputs)))["#Observability"]
+        input_mapping[output] = {f'I{i+1}': inputs[i] for i in range(len(inputs))}
+        CC0_in = {f'I{i+1}': CC_0[inp] for i, inp in enumerate(inputs)}
+        CC1_in = {f'I{i+1}': CC_1[inp] for i, inp in enumerate(inputs)}
+
+        for index, inp in enumerate(inputs):
+            CO_temp = observability_eval(CO_map[output], CO[output], CC0_in, CC1_in, index)
+            if inp not in CO or CO[inp] == -1:
+                CO[inp] = CO_temp
+            else:
+                CO[inp] = min(CO[inp], CO_temp)
+            #print(f"CO[{inp}] = {CO[inp]}")
+            # pdb.set_trace()
+
+    # Forward traversal (compute controllability first)
+    for node in circuit_data.keys():
+        compute_node_controllability(node)
+    print("CC0:        ", CC_0)
+    print("CC1:        ",CC_1)
+    for key in CC_0.keys():
+        if key not in CO:
+            CO[key] = -1
+    # Backward traversal (compute observability)
+
+    for node in reversed(list(circuit_data.keys())):
+        #print(node)
+        compute_node_observability(node)
+    #pdb.set_trace()
+
+    print("CO:", CO)
+    pdb.set_trace()
+    
+    return CO, CC_0, CC_1
 
 #TO DO: Basic PODEM
 #F_D: Number of Detected Faults
@@ -168,7 +304,7 @@ def basic_podem(basic_circuit, fault_list):
     return F_D, D_B,C, max_time_untestable
 
 #TO DO: Proposed PODEM
-def proposed_podem(basic_circuit, fault_list):
+def proposed_podem(basic_circuit, fault_list,CO, CC_0, CC_1):
 
     return F_D, D_B,C, max_time_untestable
 
@@ -179,8 +315,8 @@ def run_algorithm(circuit_data, fault_list, mode):
     if mode=="baseline":
         F_D, D_B,C, max_time_untestable, test_patterns=basic_podem(circuit_data, fault_list)
     else:
-        CO_0, CO_1, CC_0, CC_1=COP_map(circuit_data)
-        F_D, D_B,C, max_time_untestable, test_patterns=proposed_podem(circuit_data, fault_list)
+        CO, CC_0, CC_1=COP_map(circuit_data)
+        F_D, D_B,C, max_time_untestable, test_patterns=proposed_podem(circuit_data, fault_list,CO, CC_0, CC_1)
 
     time_elapsed=time.time()-start_time
     mem_usage = memory_usage()-mem_before
@@ -216,7 +352,7 @@ for bench_idx, bench in enumerate(bench_set):
     fault_list=obtain_list_faults(file_path, data_circuit)
     #pdb.set_trace()
 
-    test_patterns_b, coverage_b, time_elapsed_b, mem_usage_b, max_time_untestable_b, conflict_eff_b=run_algorithm(data_circuit, fault_list, "baseline")
+    #test_patterns_b, coverage_b, time_elapsed_b, mem_usage_b, max_time_untestable_b, conflict_eff_b=run_algorithm(data_circuit, fault_list, "baseline")
     test_patterns, coverage, time_elapsed, mem_usage, max_time_untestable, conflict_eff=run_algorithm(data_circuit, fault_list, "proposed")
 
     table.add_row([bench, coverage_b,coverage, time_elapsed_b,  time_elapsed, mem_usage_b, mem_usage,

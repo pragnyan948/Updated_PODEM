@@ -15,8 +15,8 @@ def read_netlist(file_name):
             #print(gate_name, gate_type, inputs)
             net_dict[gate_name] = Gate(gate_type, gate_name, inputs)
         else:
-            gate_name = each_line.split("(")[1].split(")")[0].strip()
             gate_type = each_line.split("(")[0].strip()
+            gate_name = gate_type+"_"+each_line.split("(")[1].split(")")[0].strip()
             inputs = []
             #print(gate_name, gate_type, inputs)
             net_dict[gate_name] = Gate(gate_type, gate_name, inputs)
