@@ -8,6 +8,9 @@ import psutil
 from read_netlist import read_netlist
 import csv
 import ast
+import sys
+import podem_new
+sys.setrecursionlimit(100000)
 
 def read_csv_file(file_path):
 
@@ -31,7 +34,7 @@ def read_csv_file(file_path):
         gate_dict[key] = row  
 
     #for k, v in gate_dict.items():
-        #print(f"Key: {k} → Value: {v}")
+        #print(f"Key: {k} ? Value: {v}")
     return gate_dict
 
 def memory_usage():
@@ -72,6 +75,9 @@ def filter_benchmark(parent_folder):
     mode="baseline"
     #count_bench=1
     bench_set=set()
+
+    # change this to test only 1 circuit
+    # folder_numbers = [17]
     for count_bench in folder_numbers:
         str_count=str(count_bench)if count_bench>9 else "0"+str(count_bench)
         directory_name=parent_folder+"b"+str_count
@@ -351,6 +357,10 @@ for bench_idx, bench in enumerate(bench_set):
     data_circuit=read_netlist(file_path)
     fault_list=obtain_list_faults(file_path, data_circuit)
     #pdb.set_trace()
+    #print(fault_list)
+
+    # enable this to enable PODEM
+    # podem_new.basic_podem(file_path, fault_list)
 
     #test_patterns_b, coverage_b, time_elapsed_b, mem_usage_b, max_time_untestable_b, conflict_eff_b=run_algorithm(data_circuit, fault_list, "baseline")
     test_patterns, coverage, time_elapsed, mem_usage, max_time_untestable, conflict_eff=run_algorithm(data_circuit, fault_list, "proposed")
