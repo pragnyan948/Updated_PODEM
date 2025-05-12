@@ -53,7 +53,7 @@ def count_input_usage(bench_file):
                 inputs = [i.strip() for i in inputs]
                 for inp in inputs:
                     usage_count[inp] += 1
-
+    #pdb.set_trace()
     return usage_count
 
 def get_subfolder_numbers(parent_folder):
@@ -89,7 +89,7 @@ def filter_benchmark(parent_folder):
         max_signal = max(usage_data, key=usage_data.get)
         max_count = usage_data[max_signal]
         #print("Max Fanout of the Benchmark b"+str_count+":", max_count)
-        if max_count>40:
+        if max_count>0:
             bench_set.add(count_bench)
         #pdb.set_trace()
         
@@ -334,12 +334,13 @@ def run_algorithm(circuit_data, fault_list, mode):
     mem_before = memory_usage()
     # TO DO: DEVELOP 1) BASIC PODEM for comparison 2) OBSERVABILITY & CONTROLLABILITY-AWARE PODEM
     if mode=="baseline":
-        F_D, D_B,C, max_time_untestable, test_patterns=basic_podem(circuit_data, fault_list)
+        F_D, D_B,C, max_time_untestable, test_patterns=podem_new.basic_podem(file_path, fault_list)
+        #F_D, D_B,C, max_time_untestable, test_patterns=basic_podem(circuit_data, fault_list)
     else:
         CO, CC_0, CC_1=COP_map(circuit_data)
         F_D, D_B,C, max_time_untestable, test_patterns=proposed_podem(circuit_data, fault_list,CO, CC_0, CC_1)
         #F_D, D_B,C, max_time_untestable, test_patterns=0, 0, 100, 0, 0
-
+    pdb.set_trace()
     time_elapsed=time.time()-start_time
     mem_usage = memory_usage()-mem_before
 
@@ -378,7 +379,7 @@ for bench_idx, bench in enumerate(bench_set):
     # enable this to enable PODEM
     # podem_new.basic_podem(file_path, fault_list)
 
-    #test_patterns_b, coverage_b, time_elapsed_b, mem_usage_b, max_time_untestable_b, conflict_eff_b=run_algorithm(data_circuit, fault_list, "baseline")
+    test_patterns_b, coverage_b, time_elapsed_b, mem_usage_b, max_time_untestable_b, conflict_eff_b=run_algorithm(data_circuit, fault_list, "baseline")
     test_patterns, coverage, time_elapsed, mem_usage, max_time_untestable, conflict_eff=run_algorithm(data_circuit, fault_list, "proposed")
 
     #table.add_row([bench, coverage_b,coverage, time_elapsed_b,  time_elapsed, mem_usage_b, mem_usage,
