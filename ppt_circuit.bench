@@ -1,0 +1,24 @@
+# edf2bench v0.8
+#   (!) 1997-2003 Giovanni Squillero <giovanni.squillero@polito.it>
+#
+# Edf source: "b03/b03_opt_C.edf"
+# 35 inputs
+# 34 outputs
+# 9 inverters
+# 175 gates (1 and, 98 nand, 6 or, 1 nor, 9 not)
+
+INPUT(A)
+INPUT(B)
+INPUT(C)
+INPUT(D)
+INPUT(E)
+INPUT(F)
+INPUT(G)
+OUTPUT(U3)
+OUTPUT(U6)
+U1 = AND(A, B)
+U2 = AND(C, U4)
+U3 = OR(U1, U2)
+U4 = OR(D, E)
+U5 = AND(U2, F)
+U6 = OR(G, U5)
