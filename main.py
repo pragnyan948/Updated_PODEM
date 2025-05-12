@@ -83,7 +83,7 @@ def filter_benchmark(parent_folder):
         max_signal = max(usage_data, key=usage_data.get)
         max_count = usage_data[max_signal]
         #print("Max Fanout of the Benchmark b"+str_count+":", max_count)
-        if max_count>1:
+        if max_count>40:
             bench_set.add(count_bench)
         #pdb.set_trace()
         
@@ -97,14 +97,18 @@ def obtain_list_faults(file_path, circuit_data):
 
     converted_faults = []
     collapsed_faults = []
-    num_gates=0
-    num_gate_nodes=0
+    num_gates, num_gate_nodes, num_inputs, num_outputs=0, 0, 0, 0
+
     for key in circuit_data.keys():
         value=circuit_data[key]
         type=value.typ
         inputs=value.inputs
         output=value.name
-        if type!='INPUT' and type!='OUTPUT':
+        if type=='INPUT':
+            num_inputs+=1
+        elif type=='OUTPUT':
+            num_outputs+=1
+        else:
             num_gates+=1
             num_gate_nodes+=len(inputs)+1 #1 for gate output node
             list_faults=data.get(str(type)+'-'+str(len(inputs)))["#List of Collapsed Faults"]
@@ -120,6 +124,7 @@ def obtain_list_faults(file_path, circuit_data):
                 else:
                     new_fault = fault  
                 converted_faults.append(new_fault)
+        
 
     for fault in converted_faults:
         key=fault.split('.')[1].split('/')[0]
@@ -133,6 +138,8 @@ def obtain_list_faults(file_path, circuit_data):
             if key in fault:
                 collapsed_faults.append(fault)
     print("Benchmark: ", file_path)
+    print("Number of inputs: ", num_inputs)
+    print("Number of outputs: ", num_outputs)
     print("Number of gates: ", num_gates)
     print("Maximum Fanout of the Benchmark: ", max(usage_data.values()))
     print("Number of Stuck at Faults that can occur: ", 2*num_gate_nodes)
@@ -184,11 +191,10 @@ def COP_map(circuit_data):
         #pdb.set_trace()
         if node in CC_0 and node in CC_1:
             return  
-
         value = circuit_data[node]
         type = value.typ
         inputs = value.inputs
-        output = value.name if type != 'INPUT' and type!='OUTPUT' else value.name.split('_')[1]
+        output = value.name if type != 'INPUT' and type!='OUTPUT' else "_".join(value.name.split("_")[1:])
         #pdb.set_trace()
 
         if type == 'INPUT':
@@ -215,12 +221,14 @@ def COP_map(circuit_data):
         CC_0[output] = controllability_eval(CC_0_map[output], CC0_in, CC1_in)
         CC_1[output] = controllability_eval(CC_1_map[output], CC0_in, CC1_in)
 
+
     def observability_eval(CO_map, CO, CC0_in, CC1_in, index):
         inputs = []
         output = None
         offset = 0
         use_min = False
         CC_in={}
+
         for item in CO_map:
             signal, value = item.split(':')
             if signal.startswith('O'):
@@ -236,27 +244,31 @@ def COP_map(circuit_data):
                     bool_CC1 = signal.split('-')[0][-1]
                     inp=signal.split('-')[1]
                     if int(inp[-1])==index+1:
+                        #pdb.set_trace()
                         inp='I1'
                     inputs.append(inp)
                     CC_in[inp] = CC1_in[inp] if bool_CC1 else CC0_in[inp]
 
+
         if use_min:
-            CC = min(CC_in[inp] for inp in inputs) + offset+CO
+            CO_in = min(CC_in[inp] for inp in inputs) + offset+CO
         else:
-            CC = sum(CC_in[inp] for inp in inputs) + offset+CO
-        return CC    
+            CO_in = sum(CC_in[inp] for inp in inputs) + offset+CO
+        #pdb.set_trace()
+        
+        return CO_in    
 
 
     def compute_node_observability(node):
         value = circuit_data[node]
         type = value.typ
         inputs = value.inputs
-        output = value.name if type != 'INPUT' and type!='OUTPUT' else value.name.split('_')[1]
+        output = value.name if type != 'INPUT' and type!='OUTPUT' else "_".join(value.name.split("_")[1:])
         if type == 'INPUT' or type=='OUTPUT':
             return
         # Recursively compute observability of output node first
-        if output not in CO:
-            for out_node in circuit_data.keys():
+        if output not in CO or CO[output] == -1:
+            for out_node in reversed(list(circuit_data.keys())):
                 if output in circuit_data[out_node].inputs:
                     compute_node_observability(out_node)
 
@@ -265,7 +277,9 @@ def COP_map(circuit_data):
         input_mapping[output] = {f'I{i+1}': inputs[i] for i in range(len(inputs))}
         CC0_in = {f'I{i+1}': CC_0[inp] for i, inp in enumerate(inputs)}
         CC1_in = {f'I{i+1}': CC_1[inp] for i, inp in enumerate(inputs)}
-
+        #print("Output: ", output)
+        #print("Inputs: ", inputs)
+        
         for index, inp in enumerate(inputs):
             CO_temp = observability_eval(CO_map[output], CO[output], CC0_in, CC1_in, index)
             if inp not in CO or CO[inp] == -1:
@@ -273,24 +287,25 @@ def COP_map(circuit_data):
             else:
                 CO[inp] = min(CO[inp], CO_temp)
             #print(f"CO[{inp}] = {CO[inp]}")
-            # pdb.set_trace()
+        #pdb.set_trace()
 
     # Forward traversal (compute controllability first)
     for node in circuit_data.keys():
         compute_node_controllability(node)
-    print("CC0:        ", CC_0)
-    print("CC1:        ",CC_1)
+    print("length of CC0:        ", len(CC_0))
+    print("length of CC1:        ",len(CC_1))
     for key in CC_0.keys():
         if key not in CO:
             CO[key] = -1
     # Backward traversal (compute observability)
+    #pdb.set_trace()
 
     for node in reversed(list(circuit_data.keys())):
         #print(node)
         compute_node_observability(node)
     #pdb.set_trace()
 
-    print("CO:", CO)
+    print("length of CO:", len(CO))
     pdb.set_trace()
     
     return CO, CC_0, CC_1
@@ -301,12 +316,12 @@ def COP_map(circuit_data):
 #C: Total Number of Conflicts
 #F: Total Number of Faults
 def basic_podem(basic_circuit, fault_list):
-    return F_D, D_B,C, max_time_untestable
+    return F_D, D_B,C, max_time_untestable, test_patterns
 
 #TO DO: Proposed PODEM
 def proposed_podem(basic_circuit, fault_list,CO, CC_0, CC_1):
 
-    return F_D, D_B,C, max_time_untestable
+    return F_D, D_B,C, max_time_untestable,test_patterns
 
 def run_algorithm(circuit_data, fault_list, mode):
     start_time=time.time()
@@ -317,6 +332,7 @@ def run_algorithm(circuit_data, fault_list, mode):
     else:
         CO, CC_0, CC_1=COP_map(circuit_data)
         F_D, D_B,C, max_time_untestable, test_patterns=proposed_podem(circuit_data, fault_list,CO, CC_0, CC_1)
+        #F_D, D_B,C, max_time_untestable, test_patterns=0, 0, 100, 0, 0
 
     time_elapsed=time.time()-start_time
     mem_usage = memory_usage()-mem_before
@@ -355,7 +371,7 @@ for bench_idx, bench in enumerate(bench_set):
     #test_patterns_b, coverage_b, time_elapsed_b, mem_usage_b, max_time_untestable_b, conflict_eff_b=run_algorithm(data_circuit, fault_list, "baseline")
     test_patterns, coverage, time_elapsed, mem_usage, max_time_untestable, conflict_eff=run_algorithm(data_circuit, fault_list, "proposed")
 
-    table.add_row([bench, coverage_b,coverage, time_elapsed_b,  time_elapsed, mem_usage_b, mem_usage,
-                       max_time_untestable_b, max_time_untestable, conflict_eff_b, conflict_eff])
+    #table.add_row([bench, coverage_b,coverage, time_elapsed_b,  time_elapsed, mem_usage_b, mem_usage,
+                       #max_time_untestable_b, max_time_untestable, conflict_eff_b, conflict_eff])
 
 print(table)
