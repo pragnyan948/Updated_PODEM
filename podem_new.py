@@ -494,7 +494,7 @@ def basic_podem(circuit_file, fault_list,mode, CC_0, CC_1, CO):
         in_node = each_fault.split(".")[1].split("/")[0]
         fault_val = each_fault.split("/")[1]
     
-        fault = Fault(out_node, fault_val)
+        fault = Fault(in_node, fault_val)
         start_time=time.time()
         (test_vector, backtracks) = podem(fault, c,mode, CC_0, CC_1, CO)
         time_elapsed=time.time()-start_time

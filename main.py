@@ -89,7 +89,7 @@ def filter_benchmark(parent_folder):
         max_signal = max(usage_data, key=usage_data.get)
         max_count = usage_data[max_signal]
         #print("Max Fanout of the Benchmark b"+str_count+":", max_count)
-        if max_count>40:
+        if max_count>0:
             bench_set.add(count_bench)
         #pdb.set_trace()
         
@@ -334,9 +334,11 @@ def run_algorithm(circuit_data, fault_list, mode):
     mem_before = memory_usage()
     # TO DO: DEVELOP 1) BASIC PODEM for comparison 2) OBSERVABILITY & CONTROLLABILITY-AWARE PODEM
     if mode=="baseline":
+        print("BASIC PODEM")
         F_D, D_B,C, max_time_untestable, test_patterns=podem_new.basic_podem(file_path, fault_list,mode, None, None, None)
         #F_D, D_B,C, max_time_untestable, test_patterns=basic_podem(circuit_data, fault_list)
     else:
+        print("OBSERVABILITY & CONTROLLABILITY-AWARE PODEM")
         CO, CC_0, CC_1=COP_map(circuit_data)
         F_D, D_B,C, max_time_untestable, test_patterns=podem_new.basic_podem(file_path, fault_list,mode, CC_0, CC_1, CO)
         #F_D, D_B,C, max_time_untestable, test_patterns=0, 0, 100, 0, 0
