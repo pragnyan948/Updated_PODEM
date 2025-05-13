@@ -89,7 +89,7 @@ def filter_benchmark(parent_folder):
         max_signal = max(usage_data, key=usage_data.get)
         max_count = usage_data[max_signal]
         #print("Max Fanout of the Benchmark b"+str_count+":", max_count)
-        if max_count>0:
+        if max_count>40:
             bench_set.add(count_bench)
         #pdb.set_trace()
         
@@ -312,7 +312,7 @@ def COP_map(circuit_data):
     #pdb.set_trace()
 
     print("length of CO:", len(CO))
-    pdb.set_trace()
+    #pdb.set_trace()
     
     return CO, CC_0, CC_1
 
@@ -340,7 +340,7 @@ def run_algorithm(circuit_data, fault_list, mode):
         CO, CC_0, CC_1=COP_map(circuit_data)
         F_D, D_B,C, max_time_untestable, test_patterns=podem_new.basic_podem(file_path, fault_list,mode, CC_0, CC_1, CO)
         #F_D, D_B,C, max_time_untestable, test_patterns=0, 0, 100, 0, 0
-    pdb.set_trace()
+    #pdb.set_trace()
     time_elapsed=time.time()-start_time
     mem_usage = memory_usage()-mem_before
 
@@ -384,6 +384,7 @@ for bench_idx, bench in enumerate(bench_set):
 
     table.add_row([bench, coverage_b,coverage, time_elapsed_b,  time_elapsed, mem_usage_b, mem_usage,
                        max_time_untestable_b, max_time_untestable, conflict_eff_b, conflict_eff])
+    print(table)
     pdb.set_trace()
 
 

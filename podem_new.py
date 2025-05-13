@@ -2,7 +2,7 @@ import pprint as pp
 import time
 import pdb
 back_track_counter = 0
-DEBUG=False
+DEBUG=  False
 def read_netlist(file_name):
     net_dict = dict();
     inputs_list = []
@@ -63,6 +63,7 @@ class Circuit:
         self.po = []              # list of primary output names
         self.gates = []           # list of Gate objects
         self.values = {}          # node_name -> logic value
+        self.pi_values_for_test = {}
         self.fault_gate_map = {}  # output node -> Gate driving it
         self.fault = None         # Fault object
 
@@ -94,6 +95,7 @@ class Circuit:
     def reset(self):
         self.values = {i: 'X' for i in self.values.keys()}
         self.fault = None
+        self.pi_values_for_test = {}
         for g in self.gates:
             g.value = 'X'
         if DEBUG:
@@ -122,14 +124,26 @@ class Circuit:
         changed = True
         while changed:
             changed = False
+
+            # inject fault at site when the fault is at a primary input
+            if self.fault and self.fault.node in self.primary_inputs():
+                # then check if the value set is to correct one, in that case, add D
+                stuck = self.fault.stuck_value
+                old_value = self.values[self.fault.node]
+                if old_value == "1" and stuck == "0":
+                    self.values[self.fault.node] = "D"
+                    self.pi_values_for_test[self.fault.node] = 1
+                if old_value == "0" and stuck == "1":
+                    self.values[self.fault.node] = "Db"
+                    self.pi_values_for_test[self.fault.node] = 0
             for g in self.gates:
                 in_vals = [self.values[i] for i in g.inputs]
                 # compute the good circuit value
-                if DEBUG:
-                    print("eval1 debug", g.name)
+                #if DEBUG:
+                    #print("eval1 debug", g.name)
                 good_val = self._eval_gate(g.type, in_vals)
-                if DEBUG:
-                    print("eval3 debug", good_val)
+                #if DEBUG:
+                    #print("eval3 debug", good_val)
 
                 # inject fault at site
                 if self.fault and g.output == self.fault.node:
@@ -150,8 +164,8 @@ class Circuit:
 
     def _eval_gate(self, type_, in_vals):
         # blocking X before D/Db propagation
-        if DEBUG:
-            print("debug eval", type_, in_vals)
+        #if DEBUG:
+            #print("debug eval", type_, in_vals)
 
         if type_ == 'NOT':
             val = in_vals[0]
@@ -237,6 +251,8 @@ def opposite(val):
 
 def fault_activated(fault, circ):
     v = circ.get(fault.node)
+    if DEBUG:
+        print("debug fault activated", fault.node)
     return (fault.stuck_value == '0' and v == 'D') or \
            (fault.stuck_value == '1' and v == 'Db')
 
@@ -264,14 +280,21 @@ def backtrace(node, value, circ, indent='', mode="baseline", propagate=False, CC
     gate = circ.fault_gate_map[node]
     if gate.name not in visited:
         visited[gate.name] = set()
-
+    if gate.type == "NOT" or gate.type == "NAND" or gate.type == "NOR":
+        old_value = value
+        if value == '1':
+            value = '0'
+        elif value == '0':
+            value = '1'
+        if DEBUG:
+            print("May12 debug old value from", old_value, "to", value)
+        
     #pdb.set_trace()
     # choose an input still X, else pick first input
     if mode =="baseline":
         for inp in gate.inputs:
             if circ.get(inp) == 'X':
-                value_update = value if gate.type in ('AND', 'OR') else opposite(value)
-                return backtrace(inp, value_update, circ, indent+'  ', mode, propagate, CC_0, CC_1, CO,visited)
+                return backtrace(inp, value, circ, indent+'  ', mode, propagate, CC_0, CC_1, CO,visited)
     elif mode =="proposed":
         #pdb.set_trace()
         if gate.type in ('AND', 'OR'):
@@ -279,24 +302,24 @@ def backtrace(node, value, circ, indent='', mode="baseline", propagate=False, CC
                 sorted_nodes = sorted(gate.inputs, key=lambda n: CC_1[n])
             else:
                 sorted_nodes = sorted(gate.inputs, key=lambda n: CC_0[n])
-            value_update = value
         else:
             if value =='0':
                 sorted_nodes = sorted(gate.inputs, key=lambda n: CC_0[n])
             else:
                 sorted_nodes = sorted(gate.inputs, key=lambda n: CC_1[n])
-            value_update = opposite(value)
         for candidate in sorted_nodes:
             if circ.get(candidate) == 'X':
-                str_cand= candidate+'_'+value_update
+                str_cand= candidate+'_'+value
+                #print("debug candidate", str_cand, "visited", visited[gate.name])
                 if str_cand in visited[gate.name]:
                     continue
                 else:
-                    print(f"backtrace candidate {str_cand} {gate.inputs}", visited)
+                    #print(f"backtrace candidate {str_cand} {gate.inputs}", visited)
                     visited[gate.name].add(str_cand)
-                    result_node, result_value = backtrace(candidate, value_update, circ, indent + '  ', mode, propagate, CC_0, CC_1, CO, visited)
+                    result_node, result_value = backtrace(candidate, value, circ, indent + '  ', mode, propagate, CC_0, CC_1, CO, visited)
                     if result_node is not None:
                         return result_node, result_value
+   
     #return backtrace(gate.inputs[0], value, circ, indent+'  ')
     return (None, None)
 
@@ -349,11 +372,13 @@ def _podem_rec(fault, circ, stack,mode, CC_0, CC_1, CO,visited):
         if DEBUG:
             print(f"{indent}*** Test found!")
         return True
+    visited = {}
 
     obj = getObjective(fault, circ, stack,mode, CC_0, CC_1, CO,visited)
     if obj is None:
         if DEBUG:
             print(f"{indent}Dead end")
+            visited = {}
         return False
     #pdb.set_trace()
 
@@ -401,9 +426,12 @@ def podem(fault, circ,mode, CC_0, CC_1, CO):
         circ.set(pi, 'X')
     circ.set_fault(fault)
     if DEBUG:
-        print("Values", circ.values)
+        print("Values check here", circ.values)
     if _podem_rec(fault, circ, [],mode, CC_0, CC_1, CO,visited):
         tv = {pi: circ.get(pi) for pi in circ.primary_inputs()}
+        for pi in tv.keys():
+            if pi in circ.pi_values_for_test.keys():
+                tv[pi] = circ.pi_values_for_test[pi]
         if DEBUG:
             print("No of back tracks:", back_track_counter)
         print("Fault:", fault.node, fault.stuck_value)
