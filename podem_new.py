@@ -253,7 +253,7 @@ def check_test(fault, circ):
     return act and prop
 
 
-def backtrace(node, value, circ, indent=''):
+def backtrace(node, value, circ, indent='', mode="baseline", propagate=False, CC_0={}, CC_1={}, CO={},visited={}):
     """
     Trace from an internal node back to a PI that can produce `value` at `node`.
     """
@@ -262,15 +262,46 @@ def backtrace(node, value, circ, indent=''):
     if node in circ.primary_inputs():
         return node, value
     gate = circ.fault_gate_map[node]
+    if gate.name not in visited:
+        visited[gate.name] = set()
+
+    #pdb.set_trace()
     # choose an input still X, else pick first input
-    for inp in gate.inputs:
-        if circ.get(inp) == 'X':
-            return backtrace(inp, value, circ, indent+'  ')
+    if mode =="baseline":
+        for inp in gate.inputs:
+            if circ.get(inp) == 'X':
+                value_update = value if gate.type in ('AND', 'OR') else opposite(value)
+                return backtrace(inp, value_update, circ, indent+'  ', mode, propagate, CC_0, CC_1, CO,visited)
+    elif mode =="proposed":
+        #pdb.set_trace()
+        if gate.type in ('AND', 'OR'):
+            if value =='1':
+                sorted_nodes = sorted(gate.inputs, key=lambda n: CC_1[n])
+            else:
+                sorted_nodes = sorted(gate.inputs, key=lambda n: CC_0[n])
+            value_update = value
+        else:
+            if value =='0':
+                sorted_nodes = sorted(gate.inputs, key=lambda n: CC_0[n])
+            else:
+                sorted_nodes = sorted(gate.inputs, key=lambda n: CC_1[n])
+            value_update = opposite(value)
+        for candidate in sorted_nodes:
+            if circ.get(candidate) == 'X':
+                str_cand= candidate+'_'+value_update
+                if str_cand in visited[gate.name]:
+                    continue
+                else:
+                    print(f"backtrace candidate {str_cand} {gate.inputs}", visited)
+                    visited[gate.name].add(str_cand)
+                    result_node, result_value = backtrace(candidate, value_update, circ, indent + '  ', mode, propagate, CC_0, CC_1, CO, visited)
+                    if result_node is not None:
+                        return result_node, result_value
     #return backtrace(gate.inputs[0], value, circ, indent+'  ')
     return (None, None)
 
 
-def getObjective(fault, circ, stack):
+def getObjective(fault, circ, stack,mode, CC_0, CC_1, CO,visited):
     indent = '  ' * len(stack)
     if DEBUG:
         print(f"{indent}[getObjective] stack={stack}")
@@ -278,7 +309,8 @@ def getObjective(fault, circ, stack):
     # 1) Activation phase via backtrace
     if not fault_activated(fault, circ):
         desired = opposite(fault.stuck_value)
-        pi_node, pi_val = backtrace(fault.node, desired, circ, indent+'  ')
+        #pdb.set_trace()
+        pi_node, pi_val = backtrace(fault.node, desired, circ, indent+'  ',mode, False, CC_0, CC_1, CO, visited)
         if pi_node is None:
             return None
         if DEBUG:
@@ -294,7 +326,7 @@ def getObjective(fault, circ, stack):
                     if circ.get(net) == 'X':
                         nc = d.non_controlling_value()
                         # backtrace from net to a PI
-                        pi_node, pi_val = backtrace(net, nc, circ, indent+'  ')
+                        pi_node, pi_val = backtrace(net, nc, circ, indent+'  ',mode, True, CC_0, CC_1, CO,visited)
                         if DEBUG:
                             print(f"{indent}  -> propagate: set {pi_node} = {pi_val}"
                               f" (for net {net} non-controlling={nc} of {d.type})")
@@ -308,7 +340,7 @@ def getObjective(fault, circ, stack):
     return None
 
 # 2) rec podem function (Algorithm 14.10)
-def _podem_rec(fault, circ, stack):
+def _podem_rec(fault, circ, stack,mode, CC_0, CC_1, CO,visited):
     global back_track_counter
     indent = '  ' * len(stack)
     if DEBUG:
@@ -318,7 +350,7 @@ def _podem_rec(fault, circ, stack):
             print(f"{indent}*** Test found!")
         return True
 
-    obj = getObjective(fault, circ, stack)
+    obj = getObjective(fault, circ, stack,mode, CC_0, CC_1, CO,visited)
     if obj is None:
         if DEBUG:
             print(f"{indent}Dead end")
@@ -332,7 +364,7 @@ def _podem_rec(fault, circ, stack):
     circ.set(node, val)
     #pdb.set_trace()
     
-    if _podem_rec(fault, circ, stack):
+    if _podem_rec(fault, circ, stack,mode, CC_0, CC_1, CO, visited):
         return True
 
 
@@ -345,7 +377,7 @@ def _podem_rec(fault, circ, stack):
         print(f"{indent}Try opposite: {node} = {alt}")
     stack.append((node, alt))
     circ.set(node, alt)
-    if _podem_rec(fault, circ, stack):
+    if _podem_rec(fault, circ, stack,mode, CC_0, CC_1, CO, visited):
         return True
 
     # Both failed
@@ -357,19 +389,20 @@ def _podem_rec(fault, circ, stack):
     return False
 
 
-def podem(fault, circ):
+def podem(fault, circ,mode, CC_0, CC_1, CO):
     if DEBUG:
         print("---- Starting PODEM ----")
         print("Fault:", fault.node, fault.stuck_value)
     global back_track_counter
     back_track_counter = 0
     circ.reset()
+    visited = {}
     for pi in circ.primary_inputs():
         circ.set(pi, 'X')
     circ.set_fault(fault)
     if DEBUG:
         print("Values", circ.values)
-    if _podem_rec(fault, circ, []):
+    if _podem_rec(fault, circ, [],mode, CC_0, CC_1, CO,visited):
         tv = {pi: circ.get(pi) for pi in circ.primary_inputs()}
         if DEBUG:
             print("No of back tracks:", back_track_counter)
@@ -403,7 +436,7 @@ def podem(fault, circ):
 
 #test_vector = podem(fault, c)
 
-def basic_podem(circuit_file, fault_list):
+def basic_podem(circuit_file, fault_list,mode, CC_0, CC_1, CO):
     #netlist = read_netlist("/ece/home/kola0161/vda2/simple_circuit.bench")
 
     # U23352.U2360/1
@@ -433,9 +466,9 @@ def basic_podem(circuit_file, fault_list):
         in_node = each_fault.split(".")[1].split("/")[0]
         fault_val = each_fault.split("/")[1]
     
-        fault = Fault(in_node, fault_val)
+        fault = Fault(out_node, fault_val)
         start_time=time.time()
-        (test_vector, backtracks) = podem(fault, c)
+        (test_vector, backtracks) = podem(fault, c,mode, CC_0, CC_1, CO)
         time_elapsed=time.time()-start_time
         #pdb.set_trace()
         if backtracks > 0:

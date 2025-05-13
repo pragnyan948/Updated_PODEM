@@ -334,11 +334,11 @@ def run_algorithm(circuit_data, fault_list, mode):
     mem_before = memory_usage()
     # TO DO: DEVELOP 1) BASIC PODEM for comparison 2) OBSERVABILITY & CONTROLLABILITY-AWARE PODEM
     if mode=="baseline":
-        F_D, D_B,C, max_time_untestable, test_patterns=podem_new.basic_podem(file_path, fault_list)
+        F_D, D_B,C, max_time_untestable, test_patterns=podem_new.basic_podem(file_path, fault_list,mode, None, None, None)
         #F_D, D_B,C, max_time_untestable, test_patterns=basic_podem(circuit_data, fault_list)
     else:
         CO, CC_0, CC_1=COP_map(circuit_data)
-        F_D, D_B,C, max_time_untestable, test_patterns=proposed_podem(circuit_data, fault_list,CO, CC_0, CC_1)
+        F_D, D_B,C, max_time_untestable, test_patterns=podem_new.basic_podem(file_path, fault_list,mode, CC_0, CC_1, CO)
         #F_D, D_B,C, max_time_untestable, test_patterns=0, 0, 100, 0, 0
     pdb.set_trace()
     time_elapsed=time.time()-start_time
@@ -347,8 +347,8 @@ def run_algorithm(circuit_data, fault_list, mode):
     F=len(fault_list)
 
     coverage=F_D/F
-     
-    conflict_eff=D_B/C
+    
+    conflict_eff=D_B/C if C!=0 else 'No conflicts'
     print("Summary for benchmark ", bench)
     print("Fault Coverage: ", coverage)
     print("Time consumed by the algorithm:",time_elapsed)
@@ -382,7 +382,9 @@ for bench_idx, bench in enumerate(bench_set):
     test_patterns_b, coverage_b, time_elapsed_b, mem_usage_b, max_time_untestable_b, conflict_eff_b=run_algorithm(data_circuit, fault_list, "baseline")
     test_patterns, coverage, time_elapsed, mem_usage, max_time_untestable, conflict_eff=run_algorithm(data_circuit, fault_list, "proposed")
 
-    #table.add_row([bench, coverage_b,coverage, time_elapsed_b,  time_elapsed, mem_usage_b, mem_usage,
-                       #max_time_untestable_b, max_time_untestable, conflict_eff_b, conflict_eff])
+    table.add_row([bench, coverage_b,coverage, time_elapsed_b,  time_elapsed, mem_usage_b, mem_usage,
+                       max_time_untestable_b, max_time_untestable, conflict_eff_b, conflict_eff])
+    pdb.set_trace()
+
 
 print(table)
