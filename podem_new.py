@@ -2,7 +2,7 @@ import pprint as pp
 import time
 import pdb
 back_track_counter = 0
-DEBUG=False
+DEBUG=True
 def read_netlist(file_name):
     net_dict = dict();
     inputs_list = []
@@ -279,6 +279,15 @@ def backtrace(node, value, circ, indent=''):
         return node, value
     gate = circ.fault_gate_map[node]
     # choose an input still X, else pick first input
+    if gate.type == "NOT" or gate.type == "NAND" or gate.type == "NOR":
+        old_value = value
+        if value == '1':
+            value = '0'
+        if value == '0':
+            value = '1'
+        if DEBUG:
+            print("May12 debug old value from", old_value, "to", value)
+        
     for inp in gate.inputs:
         if circ.get(inp) == 'X':
             return backtrace(inp, value, circ, indent+'  ')
