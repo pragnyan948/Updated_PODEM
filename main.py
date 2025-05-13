@@ -11,6 +11,7 @@ import ast
 import sys
 import podem_new
 sys.setrecursionlimit(100000)
+DEBUG=False
 
 def read_csv_file(file_path):
 
@@ -79,6 +80,8 @@ def filter_benchmark(parent_folder):
     # change this to test only 1 circuit
     # folder_numbers = [17]
     for count_bench in folder_numbers:
+        if count_bench in {4,5,7, 11, 12,14, 15, 16, 17, 18, 19, 20, 21, 22, 23}:
+            continue
         str_count=str(count_bench)if count_bench>9 else "0"+str(count_bench)
         directory_name=parent_folder+"b"+str_count
         bench_file = directory_name+"/b"+ str_count+"_opt_C.bench"
@@ -143,14 +146,15 @@ def obtain_list_faults(file_path, circuit_data):
         else:
             if key in fault:
                 collapsed_faults.append(fault)
-    print("Benchmark: ", file_path)
-    print("Number of inputs: ", num_inputs)
-    print("Number of outputs: ", num_outputs)
-    print("Number of gates: ", num_gates)
-    print("Maximum Fanout of the Benchmark: ", max(usage_data.values()))
-    print("Number of Stuck at Faults that can occur: ", 2*num_gate_nodes)
-    print("Number of Stuck at Faults after Gate collapsing", len(converted_faults))   
-    print("Number of Stuck at Faults after fanout free node collapsing", len(collapsed_faults))
+    if DEBUG:
+        print("Benchmark: ", file_path)
+        print("Number of inputs: ", num_inputs)
+        print("Number of outputs: ", num_outputs)
+        print("Number of gates: ", num_gates)
+        print("Maximum Fanout of the Benchmark: ", max(usage_data.values()))
+        print("Number of Stuck at Faults that can occur: ", 2*num_gate_nodes)
+        print("Number of Stuck at Faults after Gate collapsing", len(converted_faults))   
+        print("Number of Stuck at Faults after fanout free node collapsing", len(collapsed_faults))
     #pdb.set_trace()
     
     return collapsed_faults
@@ -298,8 +302,9 @@ def COP_map(circuit_data):
     # Forward traversal (compute controllability first)
     for node in circuit_data.keys():
         compute_node_controllability(node)
-    print("length of CC0:        ", len(CC_0))
-    print("length of CC1:        ",len(CC_1))
+    if DEBUG:
+        print("length of CC0:        ", len(CC_0))
+        print("length of CC1:        ",len(CC_1))
     for key in CC_0.keys():
         if key not in CO:
             CO[key] = -1
@@ -310,35 +315,31 @@ def COP_map(circuit_data):
         #print(node)
         compute_node_observability(node)
     #pdb.set_trace()
-
-    print("length of CO:", len(CO))
+    if DEBUG:
+        print("length of CO:", len(CO))
     #pdb.set_trace()
     
     return CO, CC_0, CC_1
 
-#TO DO: Basic PODEM
+
+
 #F_D: Number of Detected Faults
 #D_B: Total Number of Decisions Backtracked
 #C: Total Number of Conflicts
 #F: Total Number of Faults
-def basic_podem(basic_circuit, fault_list):
-    return F_D, D_B,C, max_time_untestable, test_patterns
-
-#TO DO: Proposed PODEM
-def proposed_podem(basic_circuit, fault_list,CO, CC_0, CC_1):
-
-    return F_D, D_B,C, max_time_untestable,test_patterns
 
 def run_algorithm(circuit_data, fault_list, mode):
     start_time=time.time()
     mem_before = memory_usage()
-    # TO DO: DEVELOP 1) BASIC PODEM for comparison 2) OBSERVABILITY & CONTROLLABILITY-AWARE PODEM
+    #1) BASIC PODEM for comparison 2) OBSERVABILITY & CONTROLLABILITY-AWARE PODEM
     if mode=="baseline":
-        print("BASIC PODEM")
+        if DEBUG:
+            print("Running Basic PODEM")
         F_D, D_B,C, max_time_untestable, test_patterns=podem_new.basic_podem(file_path, fault_list,mode, None, None, None)
         #F_D, D_B,C, max_time_untestable, test_patterns=basic_podem(circuit_data, fault_list)
     else:
-        print("OBSERVABILITY & CONTROLLABILITY-AWARE PODEM")
+        if DEBUG:
+            print("Running OBSERVABILITY & CONTROLLABILITY-AWARE PODEM")
         CO, CC_0, CC_1=COP_map(circuit_data)
         F_D, D_B,C, max_time_untestable, test_patterns=podem_new.basic_podem(file_path, fault_list,mode, CC_0, CC_1, CO)
         #F_D, D_B,C, max_time_untestable, test_patterns=0, 0, 100, 0, 0
@@ -351,12 +352,18 @@ def run_algorithm(circuit_data, fault_list, mode):
     coverage=F_D/F
     
     conflict_eff=D_B/C if C!=0 else 'No conflicts'
-    print("Summary for benchmark ", bench)
-    print("Fault Coverage: ", coverage)
-    print("Time consumed by the algorithm:",time_elapsed)
-    print("Memory consumed by the algorithm:",mem_usage)
-    print("Untestable Fault Detection Efficiency:", max_time_untestable)
-    print("Conflict Resolution Efficiency:", conflict_eff)
+    if DEBUG:
+        print("test_patterns: ", test_patterns)
+        print("Summary for benchmark ", bench)
+        print("Number of Faults: ", F)
+        print("Number of Detected Faults: ", F_D)
+        print("Number of Decisions Backtracked: ", D_B)
+        print("Number of Conflicts: ", C)
+        print("Fault Coverage: ", coverage)
+        print("Time consumed by the algorithm:",time_elapsed)
+        print("Memory consumed by the algorithm:",mem_usage)
+        print("Untestable Fault Detection Efficiency:", max_time_untestable)
+        print("Conflict Resolution Efficiency:", conflict_eff)
     return test_patterns, coverage, time_elapsed, mem_usage, max_time_untestable, conflict_eff
 
 
@@ -386,8 +393,10 @@ for bench_idx, bench in enumerate(bench_set):
 
     table.add_row([bench, coverage_b,coverage, time_elapsed_b,  time_elapsed, mem_usage_b, mem_usage,
                        max_time_untestable_b, max_time_untestable, conflict_eff_b, conflict_eff])
-    print(table)
-    pdb.set_trace()
+    #print(table)
+    #pdb.set_trace()
 
 
 print(table)
+with open("Output_PODEM_vs_Proposed PODEM.txt", "w") as file:
+    file.write(table.get_string())

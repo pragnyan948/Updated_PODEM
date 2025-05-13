@@ -297,16 +297,10 @@ def backtrace(node, value, circ, indent='', mode="baseline", propagate=False, CC
                 return backtrace(inp, value, circ, indent+'  ', mode, propagate, CC_0, CC_1, CO,visited)
     elif mode =="proposed":
         #pdb.set_trace()
-        if gate.type in ('AND', 'OR'):
-            if value =='1':
-                sorted_nodes = sorted(gate.inputs, key=lambda n: CC_1[n])
-            else:
-                sorted_nodes = sorted(gate.inputs, key=lambda n: CC_0[n])
+        if value =='1':
+            sorted_nodes = sorted(gate.inputs, key=lambda n: CC_1[n])
         else:
-            if value =='0':
-                sorted_nodes = sorted(gate.inputs, key=lambda n: CC_0[n])
-            else:
-                sorted_nodes = sorted(gate.inputs, key=lambda n: CC_1[n])
+            sorted_nodes = sorted(gate.inputs, key=lambda n: CC_0[n])
         for candidate in sorted_nodes:
             if circ.get(candidate) == 'X':
                 str_cand= candidate+'_'+value
@@ -434,8 +428,8 @@ def podem(fault, circ,mode, CC_0, CC_1, CO):
                 tv[pi] = circ.pi_values_for_test[pi]
         if DEBUG:
             print("No of back tracks:", back_track_counter)
-        print("Fault:", fault.node, fault.stuck_value)
-        print("---- Test vector found:", tv)
+            print("Fault:", fault.node, fault.stuck_value)
+            print("---- Test vector found:", tv)
         
         return (tv, back_track_counter)
     if DEBUG:
@@ -504,8 +498,10 @@ def basic_podem(circuit_file, fault_list,mode, CC_0, CC_1, CO):
         if test_vector != None:
             detected_faults = detected_faults + 1
             test_patterns[each_fault]=test_vector
-            print("ran podem and fault detected ", each_fault, " backtracks=", backtracks)
+            if DEBUG:
+                print("ran podem and fault detected ", each_fault, " backtracks=", backtracks)
         else:
-            print("fault ", each_fault," undetected , backtracks=", backtracks," max_time_untestable:",time_elapsed)
+            if DEBUG:
+                print("fault ", each_fault," undetected , backtracks=", backtracks," max_time_untestable:",time_elapsed)
             max_time_untestable[each_fault]=time_elapsed
     return detected_faults, backtracks,conflicts, max_time_untestable, test_patterns
