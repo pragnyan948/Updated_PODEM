@@ -63,6 +63,7 @@ class Circuit:
         self.po = []              # list of primary output names
         self.gates = []           # list of Gate objects
         self.values = {}          # node_name -> logic value
+        self.pi_values_for_test = {}
         self.fault_gate_map = {}  # output node -> Gate driving it
         self.fault = None         # Fault object
 
@@ -94,6 +95,7 @@ class Circuit:
     def reset(self):
         self.values = {i: 'X' for i in self.values.keys()}
         self.fault = None
+        self.pi_values_for_test = {}
         for g in self.gates:
             g.value = 'X'
         if DEBUG:
@@ -122,6 +124,18 @@ class Circuit:
         changed = True
         while changed:
             changed = False
+
+            # inject fault at site when the fault is at a primary input
+            if self.fault and self.fault.node in self.primary_inputs():
+                # then check if the value set is to correct one, in that case, add D
+                stuck = self.fault.stuck_value
+                old_value = self.values[self.fault.node]
+                if old_value == "1" and stuck == "0":
+                    self.values[self.fault.node] = "D"
+                    self.pi_values_for_test[self.fault.node] = 1
+                if old_value == "0" and stuck == "1":
+                    self.values[self.fault.node] = "Db"
+                    self.pi_values_for_test[self.fault.node] = 0
             for g in self.gates:
                 in_vals = [self.values[i] for i in g.inputs]
                 # compute the good circuit value
@@ -237,6 +251,8 @@ def opposite(val):
 
 def fault_activated(fault, circ):
     v = circ.get(fault.node)
+    if DEBUG:
+        print("debug fault activated", fault.node)
     return (fault.stuck_value == '0' and v == 'D') or \
            (fault.stuck_value == '1' and v == 'Db')
 
@@ -368,9 +384,12 @@ def podem(fault, circ):
         circ.set(pi, 'X')
     circ.set_fault(fault)
     if DEBUG:
-        print("Values", circ.values)
+        print("Values check here", circ.values)
     if _podem_rec(fault, circ, []):
         tv = {pi: circ.get(pi) for pi in circ.primary_inputs()}
+        for pi in tv.keys():
+            if pi in circ.pi_values_for_test.keys():
+                tv[pi] = circ.pi_values_for_test[pi]
         if DEBUG:
             print("No of back tracks:", back_track_counter)
         print("Fault:", fault.node, fault.stuck_value)
